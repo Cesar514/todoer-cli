@@ -120,11 +120,11 @@ describe("todoer-cli nano-like TUI", () => {
     await waitForText(session, "^J New Task");
     await waitFor(() => fs.existsSync(path.join(workspace, "TODO.md")));
     await waitFor(() => fs.existsSync(path.join(workspace, "TODO_COMPLETED.md")));
-    expect(readFile(workspace, "TODO.md")).toContain(TODO_HEADER_LINES[0]);
-    expect(readFile(workspace, "TODO.md")).toContain(TODO_HEADER_LINES[2]);
+    expect(readFile(workspace, "TODO.md")).toContain(`${TODO_HEADER_LINES[0]} \\`);
+    expect(readFile(workspace, "TODO.md")).toContain(`${TODO_HEADER_LINES[2]} \\`);
     expect(readFile(workspace, "TODO.md")).not.toContain("Shortcuts:");
     expect(readFile(workspace, "TODO.md")).not.toContain("Priorities must");
-    expect(readFile(workspace, "TODO_COMPLETED.md")).toContain(COMPLETED_HEADER_LINES[1]);
+    expect(readFile(workspace, "TODO_COMPLETED.md")).toContain(`${COMPLETED_HEADER_LINES[1]} \\`);
   }, 12000);
 
   test("ctrl+j adds a new numbered task and ctrl+s saves it", async () => {
@@ -136,6 +136,34 @@ describe("todoer-cli nano-like TUI", () => {
     await typeText(session, "Second task");
     await pressKey(session, "\u0013");
     await waitFor(() => readFile(workspace, "TODO.md").includes("[] 2. Second task"));
+  }, 12000);
+
+  test("ctrl+l asks for confirmation and deletes the current TODO line on yes", async () => {
+    const workspace = createWorkspace(["First task", "Second task"]);
+    const session = launchTui(workspace);
+
+    await waitForText(session, "First task");
+    await pressKey(session, "\u000c");
+    await waitForText(session, "Delete this line?");
+    await typeText(session, "y");
+    await pressKey(session, "\u0013");
+    const todoContent = readFile(workspace, "TODO.md");
+    expect(todoContent).not.toContain("[] 1. First task \\");
+    expect(todoContent).toContain("[] 2. Second task \\");
+  }, 12000);
+
+  test("ctrl+l does not delete the current TODO line on no", async () => {
+    const workspace = createWorkspace(["First task", "Second task"]);
+    const session = launchTui(workspace);
+
+    await waitForText(session, "First task");
+    await pressKey(session, "\u000c");
+    await waitForText(session, "Delete this line?");
+    await typeText(session, "n");
+    await pressKey(session, "\u0013");
+    const todoContent = readFile(workspace, "TODO.md");
+    expect(todoContent).toContain("[] 1. First task \\");
+    expect(todoContent).toContain("[] 2. Second task \\");
   }, 12000);
 
   test("ctrl+j inserts directly below the current task instead of appending to the bottom", async () => {
@@ -172,8 +200,9 @@ describe("todoer-cli nano-like TUI", () => {
     await waitForText(session, "Third task");
     await typeText(session, "3");
     await pressKey(session, "\u0013");
-    await waitFor(() => readFile(workspace, "TODO.md").includes("[] 1. Second task"));
+    await waitFor(() => readFile(workspace, "TODO.md").includes("[] 2. Second task"));
     expect(readFile(workspace, "TODO.md")).toContain("[] 3. First task");
+    expect(readFile(workspace, "TODO.md")).toContain("[] 4. Third task");
   }, 12000);
 
   test("deleting a priority number lets it be replaced cleanly", async () => {
@@ -189,7 +218,8 @@ describe("todoer-cli nano-like TUI", () => {
     await typeText(session, "3");
     await pressKey(session, "\u0013");
     await waitFor(() => readFile(workspace, "TODO.md").includes("[] 3. First task"));
-    expect(readFile(workspace, "TODO.md")).toContain("[] 1. Second task");
+    expect(readFile(workspace, "TODO.md")).toContain("[] 2. Second task");
+    expect(readFile(workspace, "TODO.md")).toContain("[] 4. Third task");
   }, 12000);
 
   test("saving keeps the editor on the current task instead of jumping back to the top", async () => {
@@ -241,6 +271,53 @@ describe("todoer-cli nano-like TUI", () => {
     session.term.resize(120, 40);
     await new Promise((resolve) => setTimeout(resolve, 400));
     await waitForText(session, "First task");
+  }, 12000);
+
+  test("saving a TODO with more than 9 items preserves numbered lines in the file", async () => {
+    const tasks = Array.from({ length: 12 }, (_, index) => `Task ${index + 1}`);
+    const workspace = createWorkspace(tasks);
+    const session = launchTui(workspace);
+
+    await waitForText(session, "Task 10");
+    await pressKey(session, "\u0013");
+    const todoContent = readFile(workspace, "TODO.md");
+    expect(todoContent).toContain("[] 10. Task 10 \\");
+    expect(todoContent).toContain("[] 12. Task 12 \\");
+    expect(todoContent.split("\n").filter((line) => line.startsWith("[] "))).toHaveLength(12);
+  }, 12000);
+
+  test("large user-assigned priorities are preserved at the bottom of the list", async () => {
+    const workspace = createWorkspace(["First task", "Second task", "Third task"]);
+    const session = launchTui(workspace);
+
+    await waitForText(session, "First task");
+    await pressKey(session, "\u001b[C");
+    await pressKey(session, "\u001b[C");
+    await pressKey(session, "\u001b[C");
+    await pressKey(session, "\u001b[C");
+    await typeText(session, "4");
+    await pressKey(session, "\u0013");
+    const todoContent = readFile(workspace, "TODO.md");
+    expect(todoContent).toContain("[] 2. Second task \\");
+    expect(todoContent).toContain("[] 3. Third task \\");
+    expect(todoContent).toContain("[] 14. First task \\");
+  }, 12000);
+
+  test("saved TODO.md keeps comments and tasks on separate lines", async () => {
+    const tasks = ["First task", "Second task", "Third task"];
+    const workspace = createWorkspace(tasks);
+    const session = launchTui(workspace);
+
+    await waitForText(session, "Third task");
+    await pressKey(session, "\u0013");
+    const todoContent = readFile(workspace, "TODO.md");
+    const lines = todoContent.trimEnd().split("\n");
+    expect(lines[0]).toBe(`${TODO_HEADER_LINES[0]} \\`);
+    expect(lines[1]).toBe(`${TODO_HEADER_LINES[1]} \\`);
+    expect(lines[2]).toBe(`${TODO_HEADER_LINES[2]} \\`);
+    expect(lines[4]).toBe("[] 1. First task \\");
+    expect(lines[5]).toBe("[] 2. Second task \\");
+    expect(lines[6]).toBe("[] 3. Third task \\");
   }, 12000);
 
   test("ctrl+c exits the TUI", async () => {

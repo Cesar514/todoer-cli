@@ -31,12 +31,12 @@ function parseEditableTaskLine(line) {
     return null;
   }
 
-  const match = line.match(/^\[\]\s*(\d*)\.?\s*(.*)$/);
+  const match = line.match(/^\[\]\s*(\d*)\.?\s*(.*?)(?:\s+\\)?\s*$/);
   if (!match) {
     return createTask(trimmed, null);
   }
 
-  return createTask(match[2], null);
+  return createTask(match[2], sanitizePriority(match[1]));
 }
 
 function loadEditableTodo(content) {
@@ -70,31 +70,33 @@ function requestedPriorityNumber(task) {
   return Number.isInteger(parsed) ? parsed : null;
 }
 
-function reorderTasks(tasks, currentTaskId) {
-  const reordered = tasks.map((task) => ({ ...task }));
-  const originalOrder = reordered.map((task) => task.id);
+function normalizeRequestedPriorities(tasks) {
+  let previousPriority = 0;
 
-  for (const taskId of originalOrder) {
-    const currentIndex = reordered.findIndex((task) => task.id === taskId);
-    if (currentIndex === -1) {
-      continue;
-    }
+  return tasks.map((task) => {
+    const desiredPriority = requestedPriorityNumber(task);
+    const nextPriority = desiredPriority == null ? previousPriority + 1 : Math.max(desiredPriority, previousPriority + 1);
+    previousPriority = nextPriority;
+    return {
+      ...task,
+      requestedPriority: String(nextPriority),
+    };
+  });
+}
 
-    const task = reordered[currentIndex];
-    const priority = requestedPriorityNumber(task);
-    if (!priority || priority < 1 || priority > reordered.length) {
-      continue;
-    }
-
-    const targetIndex = priority - 1;
-    if (targetIndex === currentIndex) {
-      continue;
-    }
-
-    reordered.splice(currentIndex, 1);
-    reordered.splice(targetIndex, 0, task);
-  }
-
+function reorderTasks(tasks, currentTaskId = null) {
+  const reordered = normalizeRequestedPriorities(
+    tasks
+      .map((task, index) => ({ ...task, originalIndex: index }))
+      .sort((left, right) => {
+        const leftPriority = requestedPriorityNumber(left) ?? Number.POSITIVE_INFINITY;
+        const rightPriority = requestedPriorityNumber(right) ?? Number.POSITIVE_INFINITY;
+        if (leftPriority !== rightPriority) {
+          return leftPriority - rightPriority;
+        }
+        return left.originalIndex - right.originalIndex;
+      }),
+  );
   const newCurrentIndex = reordered.findIndex((task) => task.id === currentTaskId);
 
   return {
@@ -104,20 +106,28 @@ function reorderTasks(tasks, currentTaskId) {
 }
 
 function commitMissingPriorities(tasks) {
-  return tasks.map((task, index) => ({
-    ...task,
-    requestedPriority: task.requestedPriority == null ? String(index + 1) : task.requestedPriority,
-  }));
+  return normalizeRequestedPriorities(tasks.map((task) => ({ ...task })));
 }
 
 function serializeEditableTodo(tasks) {
-  const validTasks = tasks
-    .map((task) => task.text.trim())
-    .filter(Boolean)
-    .map((text, index) => ({
-      priority: index + 1,
-      text,
-    }));
+  const prioritizedTasks = tasks
+    .map((task, index) => ({ ...task, originalIndex: index }))
+    .filter((task) => task.text.trim())
+    .sort((left, right) => {
+      const leftPriority = requestedPriorityNumber(left) ?? Number.POSITIVE_INFINITY;
+      const rightPriority = requestedPriorityNumber(right) ?? Number.POSITIVE_INFINITY;
+      if (leftPriority !== rightPriority) {
+        return leftPriority - rightPriority;
+      }
+      return left.originalIndex - right.originalIndex;
+    });
+
+  const validTasks = normalizeRequestedPriorities(prioritizedTasks)
+    .map((task) => ({
+      priority: requestedPriorityNumber(task),
+      text: task.text.trim(),
+    }))
+    .filter((task) => task.priority != null && task.text);
 
   return serializeTodoFile(validTasks);
 }
@@ -195,6 +205,7 @@ function createApp(rootDir) {
       todoMtimeMs: 0,
       completedMtimeMs: 0,
     },
+    confirmDeleteOpen: false,
   };
 
   const header = blessed.box({
@@ -241,6 +252,21 @@ function createApp(rootDir) {
     height: 3,
     border: "line",
     style: { border: { fg: "cyan" } },
+  });
+
+  const confirmDelete = blessed.box({
+    parent: screen,
+    top: "center",
+    left: "center",
+    width: 46,
+    height: 7,
+    border: "line",
+    hidden: true,
+    tags: false,
+    style: {
+      border: { fg: "yellow" },
+      bg: "black",
+    },
   });
 
   function setStatus(message) {
@@ -364,7 +390,7 @@ function createApp(rootDir) {
       return "^P TODO.md  ^C Exit  Read-only";
     }
 
-    return "^J New Task  ^P Switch  ^S Save  ^C Exit";
+    return "^J New Task  ^L Delete  ^P Switch  ^S Save  ^C Exit";
   }
 
   function todoDisplayLines() {
@@ -454,6 +480,13 @@ function createApp(rootDir) {
     footer.setContent(`${statusPrefix}${footerText()}`);
     applyLayout();
     renderBody();
+    if (state.confirmDeleteOpen) {
+      confirmDelete.setContent("Delete this line?\n\nY / Enter = Yes\nN / Esc = No");
+      confirmDelete.show();
+      confirmDelete.setFront();
+    } else {
+      confirmDelete.hide();
+    }
     screen.render();
     renderCursor();
   }
@@ -531,14 +564,14 @@ function createApp(rootDir) {
   }
 
   function replaceTasks(tasks, currentTaskId) {
-    setTodoTasks(tasks, currentTaskId);
+    setTodoTasks(tasks, { currentTaskId });
     state.dirty = true;
   }
 
   function editNumber(task, editFn) {
     task.requestedPriority = sanitizePriority(editFn(task.requestedPriority ?? ""));
     const targetPriority = requestedPriorityNumber(task);
-    if (!targetPriority || targetPriority < 1 || targetPriority > state.todo.tasks.length) {
+    if (!targetPriority || targetPriority < 1) {
       return;
     }
 
@@ -549,9 +582,14 @@ function createApp(rootDir) {
 
     const updated = state.todo.tasks.map((entry) => ({ ...entry }));
     const [movingTask] = updated.splice(currentIndex, 1);
-    updated.splice(targetPriority - 1, 0, movingTask);
-    state.todo.tasks = updated;
-    state.todo.currentIndex = targetPriority - 1;
+    const insertionIndex = updated.findIndex((entry) => {
+      const otherPriority = requestedPriorityNumber(entry);
+      return otherPriority != null && otherPriority >= targetPriority;
+    });
+    updated.splice(insertionIndex === -1 ? updated.length : insertionIndex, 0, movingTask);
+    const reordered = reorderTasks(updated, task.id).tasks;
+    state.todo.tasks = reordered;
+    state.todo.currentIndex = reordered.findIndex((entry) => entry.id === task.id);
   }
 
   function insertCharacter(ch) {
@@ -665,6 +703,53 @@ function createApp(rootDir) {
     }
   }
 
+  function openDeleteConfirmation() {
+    if (state.currentFile !== "todo") {
+      setStatus("FATAL: TODO_COMPLETED.md is read-only.");
+      return;
+    }
+
+    if (state.todo.tasks.length === 0) {
+      setStatus("FATAL: No TODO line to delete.");
+      return;
+    }
+
+    state.confirmDeleteOpen = true;
+    render();
+  }
+
+  function closeDeleteConfirmation(message = null) {
+    state.confirmDeleteOpen = false;
+    if (message) {
+      state.statusMessage = message;
+    }
+    render();
+  }
+
+  function deleteCurrentTask() {
+    if (state.todo.tasks.length === 0) {
+      closeDeleteConfirmation("FATAL: No TODO line to delete.");
+      return;
+    }
+
+    const updated = state.todo.tasks.map((task) => ({ ...task }));
+    updated.splice(state.todo.currentIndex, 1);
+    const nextTaskId = updated[Math.min(state.todo.currentIndex, updated.length - 1)]?.id ?? null;
+    state.confirmDeleteOpen = false;
+    replaceTasks(updated, nextTaskId);
+    if (updated.length === 0) {
+      state.todo.currentIndex = 0;
+      state.todo.cursorColumn = emptyTaskLine(0).length;
+      state.todo.scrollOffset = 0;
+    } else {
+      state.todo.currentIndex = Math.min(state.todo.currentIndex, updated.length - 1);
+      syncCursorToValidTask();
+      ensureCursorVisible();
+    }
+    state.statusMessage = "Deleted current TODO line.";
+    render();
+  }
+
   function insertNewTask() {
     if (state.currentFile !== "todo") {
       return;
@@ -748,6 +833,20 @@ function createApp(rootDir) {
       return;
     }
 
+    if (state.confirmDeleteOpen) {
+      if (key.name === "enter" || ch === "y" || ch === "Y") {
+        deleteCurrentTask();
+        return;
+      }
+
+      if (key.name === "escape" || ch === "n" || ch === "N") {
+        closeDeleteConfirmation("Delete cancelled.");
+        return;
+      }
+
+      return;
+    }
+
     if ((key.ctrl && key.name === "q") || (key.ctrl && key.name === "c")) {
       state.quitting = true;
       screen.destroy();
@@ -761,6 +860,11 @@ function createApp(rootDir) {
 
     if (key.ctrl && key.name === "s") {
       saveTodo();
+      return;
+    }
+
+    if (key.ctrl && key.name === "l") {
+      openDeleteConfirmation();
       return;
     }
 

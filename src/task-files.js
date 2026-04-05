@@ -15,6 +15,10 @@ const COMPLETED_HEADER_LINES = [
   "// Format: [x] <timestamp> <task>",
 ];
 
+function markdownLine(value) {
+  return `${value} \\`;
+}
+
 function getTodoFilePath(rootDir) {
   return path.join(rootDir, TODO_FILE_NAME);
 }
@@ -36,11 +40,11 @@ function ensureTaskFiles(rootDir) {
   const completedPath = getCompletedFilePath(rootDir);
 
   if (!fs.existsSync(todoPath)) {
-    writeFileAtomically(todoPath, `${[...TODO_HEADER_LINES, ""].join("\n")}\n`);
+    writeFileAtomically(todoPath, serializeTodoFile([]));
   }
 
   if (!fs.existsSync(completedPath)) {
-    writeFileAtomically(completedPath, `${[...COMPLETED_HEADER_LINES, ""].join("\n")}\n`);
+    writeFileAtomically(completedPath, serializeCompletedFile([]));
   }
 
   return { todoPath, completedPath };
@@ -49,7 +53,7 @@ function ensureTaskFiles(rootDir) {
 function parseTodoFile(content, filePath = TODO_FILE_NAME) {
   const tasks = [];
   const lines = content.replace(/\r\n/g, "\n").split("\n");
-  let expectedPriority = 1;
+  let previousPriority = 0;
 
   for (const line of lines) {
     const trimmed = line.trim();
@@ -57,7 +61,7 @@ function parseTodoFile(content, filePath = TODO_FILE_NAME) {
       continue;
     }
 
-    const match = line.match(/^\[\]\s+(\d+)\.\s+(.+?)\s*$/);
+    const match = line.match(/^\[\]\s+(\d+)\.\s+(.+?)(?:\s+\\)?\s*$/);
     if (!match) {
       throw new Error(`Invalid TODO entry in ${filePath}: "${line}"`);
     }
@@ -65,9 +69,9 @@ function parseTodoFile(content, filePath = TODO_FILE_NAME) {
     const priority = Number.parseInt(match[1], 10);
     const text = match[2].trim();
 
-    if (priority !== expectedPriority) {
+    if (priority <= previousPriority) {
       throw new Error(
-        `Invalid priority sequence in ${filePath}: expected ${expectedPriority}, received ${priority}`,
+        `Invalid priority order in ${filePath}: expected a value greater than ${previousPriority}, received ${priority}`,
       );
     }
 
@@ -76,7 +80,7 @@ function parseTodoFile(content, filePath = TODO_FILE_NAME) {
     }
 
     tasks.push({ priority, text });
-    expectedPriority += 1;
+    previousPriority = priority;
   }
 
   return tasks;
@@ -92,7 +96,7 @@ function parseCompletedFile(content, filePath = COMPLETED_FILE_NAME) {
       continue;
     }
 
-    const match = line.match(/^\[x\]\s+(\S+)\s+(.+?)\s*$/);
+    const match = line.match(/^\[x\]\s+(\S+)\s+(.+?)(?:\s+\\)?\s*$/);
     if (!match) {
       throw new Error(`Invalid completed entry in ${filePath}: "${line}"`);
     }
@@ -115,20 +119,20 @@ function parseCompletedFile(content, filePath = COMPLETED_FILE_NAME) {
 }
 
 function serializeTodoFile(tasks) {
-  const lines = [...TODO_HEADER_LINES, ""];
+  const lines = [...TODO_HEADER_LINES.map(markdownLine), ""];
 
   for (const task of tasks) {
-    lines.push(`[] ${task.priority}. ${task.text}`);
+    lines.push(markdownLine(`[] ${task.priority}. ${task.text}`));
   }
 
   return `${lines.join("\n")}\n`;
 }
 
 function serializeCompletedFile(entries) {
-  const lines = [...COMPLETED_HEADER_LINES, ""];
+  const lines = [...COMPLETED_HEADER_LINES.map(markdownLine), ""];
 
   for (const entry of entries) {
-    lines.push(`[x] ${entry.timestamp} ${entry.text}`);
+    lines.push(markdownLine(`[x] ${entry.timestamp} ${entry.text}`));
   }
 
   return `${lines.join("\n")}\n`;

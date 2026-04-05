@@ -1,6 +1,13 @@
 // Completed tasks for the current goal.
 // Format: [x] <timestamp> <task>
 
+[x] 2026-04-05T20:07:43Z Fixed the TUI reorder/save path so large user-assigned priorities such as `14` are preserved instead of being renumbered away.
+[x] 2026-04-05T20:07:43Z Added explicit markdown line-break markers to serialized TODO and completed files so markdown viewers render one item per line instead of collapsing lines together.
+[x] 2026-04-05T20:07:43Z Updated file creation, parsing, and PTY regression coverage so save/reload accepts the markdown line-break format while preserving intended priorities.
+[x] 2026-04-05T19:52:33Z Preserved arbitrary large user-assigned priorities so values like `14` stay at the bottom of TODO.md and survive save/reload without collapsing the rest of the numbering.
+[x] 2026-04-05T19:45:12Z Fixed TODO priority edits so valid number changes renumber and reorder tasks immediately in the in-memory editor state instead of only after a later confirmation step.
+[x] 2026-04-05T19:45:12Z Fixed the more-than-9-items save bug by preserving parsed priority numbers when reloading TODO.md, preventing tasks from collapsing into `[] .` entries after save.
+[x] 2026-04-05T19:45:12Z Verified that saved TODO.md content keeps one line per comment and one line per task, and cleared the extra scratch task rows that had been used to reproduce the large-list formatting bug.
 [x] 2026-04-05T19:33:33Z Disabled all unassigned Ctrl-key combinations so they no longer insert junk into TODO.md.
 [x] 2026-04-05T19:33:33Z Made Ctrl+J use the same insertion path as Enter, including PTY linefeed handling.
 [x] 2026-04-05T19:33:33Z Preserved the current task position and scroll state after Ctrl+S instead of jumping back to the top.
