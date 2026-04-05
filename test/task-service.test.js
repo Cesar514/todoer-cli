@@ -1,10 +1,11 @@
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { COMPLETED_HEADER_LINES, TODO_HEADER_LINES } = require("../src/task-files");
+const { COMPLETED_BACKUP_FILE_NAME, COMPLETED_HEADER_LINES, TODO_BACKUP_FILE_NAME, TODO_HEADER_LINES } = require("../src/task-files");
 const {
   addTask,
   completeTask,
+  lintTaskFiles,
   removeTask,
   reprioritizeTask,
   validateWorkspaceContents,
@@ -75,5 +76,35 @@ describe("task service", () => {
     const parsed = validateWorkspaceContents(workspace, todoContent, completedContent);
     expect(parsed.tasks).toHaveLength(1);
     expect(parsed.completed).toHaveLength(0);
+  });
+
+  test("lintTaskFiles rewrites completed entries into descending timestamp order", () => {
+    const workspace = createWorkspace(
+      ["[] 1. First task"],
+      [
+        "[x] 2026-04-05T16:32:59Z Older task",
+        "[x] 2026-04-05T20:16:27Z Newer task",
+      ],
+    );
+
+    lintTaskFiles(workspace);
+
+    const completedContent = readFile(workspace, "TODO_COMPLETED.md");
+    expect(completedContent.indexOf("2026-04-05T20:16:27Z Newer task")).toBeLessThan(
+      completedContent.indexOf("2026-04-05T16:32:59Z Older task"),
+    );
+  });
+
+  test("lintTaskFiles backs up malformed task files and recreates canonical ones", () => {
+    const workspace = createWorkspace(["[] 1. First task"]);
+    fs.writeFileSync(path.join(workspace, "TODO.md"), "broken todo\n", "utf8");
+    fs.writeFileSync(path.join(workspace, "TODO_COMPLETED.md"), "broken completed\n", "utf8");
+
+    lintTaskFiles(workspace);
+
+    expect(readFile(workspace, TODO_BACKUP_FILE_NAME)).toBe("broken todo\n");
+    expect(readFile(workspace, COMPLETED_BACKUP_FILE_NAME)).toBe("broken completed\n");
+    expect(readFile(workspace, "TODO.md")).toContain(`${TODO_HEADER_LINES[0]} \\`);
+    expect(readFile(workspace, "TODO_COMPLETED.md")).toContain(`${COMPLETED_HEADER_LINES[0]} \\`);
   });
 });

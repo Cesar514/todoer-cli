@@ -3,6 +3,8 @@ const path = require("node:path");
 
 const TODO_FILE_NAME = "TODO.md";
 const COMPLETED_FILE_NAME = "TODO_COMPLETED.md";
+const TODO_BACKUP_FILE_NAME = "TODO.bak";
+const COMPLETED_BACKUP_FILE_NAME = "TODO_COMPLETED.bak";
 
 const TODO_HEADER_LINES = [
   "// Current goal: keep this TODO list accurate while implementing the user's current request.",
@@ -27,6 +29,14 @@ function getCompletedFilePath(rootDir) {
   return path.join(rootDir, COMPLETED_FILE_NAME);
 }
 
+function getTodoBackupFilePath(rootDir) {
+  return path.join(rootDir, TODO_BACKUP_FILE_NAME);
+}
+
+function getCompletedBackupFilePath(rootDir) {
+  return path.join(rootDir, COMPLETED_BACKUP_FILE_NAME);
+}
+
 function readRequiredFile(filePath) {
   if (!fs.existsSync(filePath)) {
     throw new Error(`Required file is missing: ${filePath}`);
@@ -46,6 +56,9 @@ function ensureTaskFiles(rootDir) {
   if (!fs.existsSync(completedPath)) {
     writeFileAtomically(completedPath, serializeCompletedFile([]));
   }
+
+  normalizeTaskFile(todoPath, getTodoBackupFilePath(rootDir), parseTodoFile, serializeTodoFile, []);
+  normalizeTaskFile(completedPath, getCompletedBackupFilePath(rootDir), parseCompletedFile, serializeCompletedFile, []);
 
   return { todoPath, completedPath };
 }
@@ -131,7 +144,7 @@ function serializeTodoFile(tasks) {
 function serializeCompletedFile(entries) {
   const lines = [...COMPLETED_HEADER_LINES.map(markdownLine), ""];
 
-  for (const entry of entries) {
+  for (const entry of [...entries].sort((left, right) => right.timestamp.localeCompare(left.timestamp))) {
     lines.push(markdownLine(`[x] ${entry.timestamp} ${entry.text}`));
   }
 
@@ -142,6 +155,21 @@ function writeFileAtomically(filePath, content) {
   const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
   fs.writeFileSync(tempPath, content, "utf8");
   fs.renameSync(tempPath, filePath);
+}
+
+function normalizeTaskFile(filePath, backupPath, parseFn, serializeFn, emptyEntries) {
+  const originalContent = readRequiredFile(filePath);
+
+  try {
+    const parsed = parseFn(originalContent, filePath);
+    const canonicalContent = serializeFn(parsed);
+    if (canonicalContent !== originalContent) {
+      writeFileAtomically(filePath, canonicalContent);
+    }
+  } catch {
+    writeFileAtomically(backupPath, originalContent);
+    writeFileAtomically(filePath, serializeFn(emptyEntries));
+  }
 }
 
 function readTaskFileContents(rootDir) {
@@ -174,12 +202,16 @@ function readTaskFiles(rootDir) {
 
 module.exports = {
   COMPLETED_FILE_NAME,
+  COMPLETED_BACKUP_FILE_NAME,
   TODO_FILE_NAME,
+  TODO_BACKUP_FILE_NAME,
   COMPLETED_HEADER_LINES,
   TODO_HEADER_LINES,
   ensureTaskFiles,
   getCompletedFilePath,
+  getCompletedBackupFilePath,
   getTodoFilePath,
+  getTodoBackupFilePath,
   parseCompletedFile,
   parseTodoFile,
   readRequiredFile,

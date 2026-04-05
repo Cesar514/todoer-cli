@@ -204,6 +204,8 @@ function createApp(rootDir) {
       completedPath: getCompletedFilePath(rootDir),
       todoMtimeMs: 0,
       completedMtimeMs: 0,
+      todoContent: "",
+      completedContent: "",
     },
     confirmDeleteOpen: false,
   };
@@ -356,6 +358,8 @@ function createApp(rootDir) {
     const raw = readTaskFileContents(rootDir);
     state.files.todoPath = raw.todoPath;
     state.files.completedPath = raw.completedPath;
+    state.files.todoContent = raw.todoContent;
+    state.files.completedContent = raw.completedContent;
     state.completed.content = raw.completedContent;
     state.completed.lines = normalizeLineBreaks(raw.completedContent).split("\n");
     updateFileStats();
@@ -816,11 +820,32 @@ function createApp(rootDir) {
       return;
     }
 
-    if (state.dirty && todoMtimeMs !== state.files.todoMtimeMs) {
+    const diskTodoContent = fs.readFileSync(state.files.todoPath, "utf8");
+    const diskCompletedContent = fs.readFileSync(state.files.completedPath, "utf8");
+
+    if (state.dirty) {
+      if (diskTodoContent !== state.files.todoContent) {
+        state.files.todoMtimeMs = todoMtimeMs;
+        state.files.completedMtimeMs = completedMtimeMs;
+        state.files.todoContent = diskTodoContent;
+        state.files.completedContent = diskCompletedContent;
+        state.externalConflict = true;
+        setStatus("FATAL: TODO.md changed outside while you have unsaved edits.");
+        return;
+      }
+
+      if (diskCompletedContent !== state.files.completedContent) {
+        state.files.todoMtimeMs = todoMtimeMs;
+        state.files.completedMtimeMs = completedMtimeMs;
+        state.files.todoContent = diskTodoContent;
+        state.files.completedContent = diskCompletedContent;
+        loadWorkspace("Reloaded TODO_COMPLETED.md from disk.", { preservePosition: true });
+        render();
+        return;
+      }
+
       state.files.todoMtimeMs = todoMtimeMs;
       state.files.completedMtimeMs = completedMtimeMs;
-      state.externalConflict = true;
-      setStatus("FATAL: TODO.md changed outside while you have unsaved edits.");
       return;
     }
 

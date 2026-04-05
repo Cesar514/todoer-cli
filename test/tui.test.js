@@ -252,6 +252,23 @@ describe("todoer-cli nano-like TUI", () => {
     await waitForText(session, "loaded from disk.", 12000);
   }, 14000);
 
+  test("metadata-only TODO.md touch does not trigger external-change fatal while editing", async () => {
+    const workspace = createWorkspace(["First task"]);
+    const session = launchTui(workspace);
+
+    await waitForText(session, "First task");
+    await pressKey(session, "\u001b[F");
+    await typeText(session, " updated");
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+    const todoPath = path.join(workspace, "TODO.md");
+    const current = fs.readFileSync(todoPath, "utf8");
+    fs.writeFileSync(todoPath, current, "utf8");
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    expect(session.getOutput()).not.toContain("changed outside while you have unsaved edits");
+    await pressKey(session, "\u0013");
+    await waitFor(() => readFile(workspace, "TODO.md").includes("First task updated"));
+  }, 14000);
+
   test("resizes cleanly, keeps footer shortcuts visible, and preserves wrapped task editing", async () => {
     const workspace = createWorkspace([
       "First task with enough text to wrap when the terminal becomes narrow and force the cursor layout to adjust correctly",
