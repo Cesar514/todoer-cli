@@ -41,9 +41,15 @@ describe("task service", () => {
     reprioritizeTask(workspace, 3, 1);
     removeTask(workspace, 2);
     completeTask(workspace, 1, "2026-04-05T16:50:00Z");
+    completeTask(workspace, 1, "2026-04-05T16:51:00Z");
 
-    expect(readFile(workspace, "TODO.md")).toContain("[] 1. Inserted task");
-    expect(readFile(workspace, "TODO_COMPLETED.md")).toContain("[x] 2026-04-05T16:50:00Z Second task");
+    const todoContent = readFile(workspace, "TODO.md");
+    const completedContent = readFile(workspace, "TODO_COMPLETED.md");
+    expect(todoContent).not.toContain("[] 1. First task");
+    expect(todoContent).not.toContain("[] 1.");
+    expect(completedContent.indexOf("[x] 2026-04-05T16:51:00Z Inserted task")).toBeLessThan(
+      completedContent.indexOf("[x] 2026-04-05T16:50:00Z Second task"),
+    );
   });
 
   test("writeWorkspaceContents validates both files before writing", () => {

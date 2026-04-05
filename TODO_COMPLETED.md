@@ -1,6 +1,13 @@
 // Completed tasks for the current goal.
 // Format: [x] <timestamp> <task>
 
+[x] 2026-04-05T19:33:33Z Disabled all unassigned Ctrl-key combinations so they no longer insert junk into TODO.md.
+[x] 2026-04-05T19:33:33Z Made Ctrl+J use the same insertion path as Enter, including PTY linefeed handling.
+[x] 2026-04-05T19:33:33Z Preserved the current task position and scroll state after Ctrl+S instead of jumping back to the top.
+[x] 2026-04-05T19:33:33Z Fixed priority-number deletion so the number actually disappears and can be replaced cleanly.
+[x] 2026-04-05T19:33:33Z Fixed Enter on the first task to insert the new empty task directly underneath instead of effectively appending it lower down.
+[x] 2026-04-05T19:33:33Z Added stable arrow and mouse-wheel scrolling in TODO_COMPLETED.md with clamped scroll state.
+[x] 2026-04-05T19:33:33Z Changed completed-task ordering so newest entries are written at the top and older entries move down.
 [x] 2026-04-05T16:32:59Z Wrote the implementation plan and scaffolded the project files for the TODO CLI.
 [x] 2026-04-05T16:41:49Z Implemented TODO and TODO_COMPLETED parsing, validation, and file write flows.
 [x] 2026-04-05T16:41:49Z Implemented CLI commands to browse tasks, add tasks, remove tasks, mark tasks complete, and reprioritize tasks.

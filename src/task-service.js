@@ -111,7 +111,7 @@ function completeTask(rootDir, priority, timestamp) {
 
   const task = tasks[priority - 1];
   const updatedTasks = tasks.filter((entry) => entry.priority !== priority);
-  const updatedCompleted = [...completed, { timestamp, text: task.text }];
+  const updatedCompleted = [{ timestamp, text: task.text }, ...completed];
   saveState(rootDir, normalizePendingTasks(updatedTasks), updatedCompleted);
 }
 

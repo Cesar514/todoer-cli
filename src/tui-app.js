@@ -123,16 +123,16 @@ function serializeEditableTodo(tasks) {
 }
 
 function visibleNumber(task, index) {
-  return task.requestedPriority == null ? "" : task.requestedPriority || String(index + 1);
+  return task.requestedPriority == null ? "" : task.requestedPriority;
 }
 
 function renderTaskLine(task, index) {
-  const number = visibleNumber(task, index) || String(index + 1);
+  const number = visibleNumber(task, index);
   return `[] ${number}. ${task.text}`;
 }
 
 function taskPrefix(task, index) {
-  return `[] ${visibleNumber(task, index) || String(index + 1)}. `;
+  return `[] ${visibleNumber(task, index)}. `;
 }
 
 function emptyTaskLine(index) {
@@ -151,6 +151,10 @@ function bodyInnerWidth(body) {
   return body.width - body.iwidth;
 }
 
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
 function commentsHeight() {
   return TODO_HEADER_LINES.length + 3;
 }
@@ -163,6 +167,7 @@ function createApp(rootDir) {
     fullUnicode: true,
     title: "todoer-cli",
     dockBorders: true,
+    mouse: true,
   });
 
   const state = {
@@ -210,6 +215,7 @@ function createApp(rootDir) {
     height: commentsHeight(),
     border: "line",
     tags: false,
+    mouse: true,
     style: { border: { fg: "cyan" } },
   });
 
@@ -223,6 +229,7 @@ function createApp(rootDir) {
     scrollable: true,
     alwaysScroll: true,
     tags: true,
+    mouse: true,
     style: { border: { fg: "cyan" } },
   });
 
@@ -271,6 +278,22 @@ function createApp(rootDir) {
     }
   }
 
+  function completedVisualRowCount() {
+    const width = Math.max(1, bodyInnerWidth(body));
+    return Math.max(
+      1,
+      state.completed.lines.reduce((total, line) => total + Math.max(1, Math.ceil(Math.max(1, line.length) / width)), 0),
+    );
+  }
+
+  function maxCompletedScrollOffset() {
+    return Math.max(0, completedVisualRowCount() - Math.max(1, bodyInnerHeight(body)));
+  }
+
+  function clampCompletedScrollOffset() {
+    state.completed.scrollOffset = clamp(state.completed.scrollOffset, 0, maxCompletedScrollOffset());
+  }
+
   function ensureCursorVisible() {
     const cursorRow = visualCursorPosition().visualRow;
     const viewHeight = Math.max(1, bodyInnerHeight(body));
@@ -286,15 +309,23 @@ function createApp(rootDir) {
     }
   }
 
-  function setTodoTasks(tasks, currentTaskId = null) {
+  function setTodoTasks(tasks, options = {}) {
+    const { currentTaskId = null, preferredIndex = null, preferredCursorColumn = null, preferredScrollOffset = null } = options;
     const reordered = reorderTasks(tasks, currentTaskId);
     state.todo.tasks = reordered.tasks;
-    state.todo.currentIndex = reordered.currentIndex;
+    state.todo.currentIndex = preferredIndex == null ? reordered.currentIndex : preferredIndex;
     syncCursorToValidTask();
+    if (preferredCursorColumn != null) {
+      state.todo.cursorColumn = preferredCursorColumn;
+      syncCursorToValidTask();
+    }
+    if (preferredScrollOffset != null) {
+      state.todo.scrollOffset = Math.max(0, preferredScrollOffset);
+    }
     ensureCursorVisible();
   }
 
-  function loadWorkspace(reason = "Ready.") {
+  function loadWorkspace(reason = "Ready.", options = {}) {
     ensureTaskFiles(rootDir);
     const raw = readTaskFileContents(rootDir);
     state.files.todoPath = raw.todoPath;
@@ -310,8 +341,19 @@ function createApp(rootDir) {
       state.lintError = error.message;
     }
 
-    const currentTaskId = state.todo.tasks[state.todo.currentIndex]?.id ?? null;
-    setTodoTasks(loadEditableTodo(raw.todoContent), currentTaskId);
+    const loadedTasks = loadEditableTodo(raw.todoContent);
+    setTodoTasks(loadedTasks, {
+      currentTaskId: state.todo.tasks[state.todo.currentIndex]?.id ?? null,
+      preferredIndex: options.preservePosition ? state.todo.currentIndex : null,
+      preferredCursorColumn: options.preservePosition ? state.todo.cursorColumn : null,
+      preferredScrollOffset: options.preservePosition ? state.todo.scrollOffset : null,
+    });
+    if (options.preservePosition) {
+      state.completed.scrollOffset = Math.max(0, state.completed.scrollOffset);
+    } else {
+      state.completed.scrollOffset = 0;
+    }
+    clampCompletedScrollOffset();
     state.dirty = false;
     state.externalConflict = false;
     state.statusMessage = state.lintError ? `FATAL: ${state.lintError}` : reason;
@@ -378,6 +420,7 @@ function createApp(rootDir) {
     if (state.currentFile === "completed") {
       body.setLabel(" TODO_COMPLETED.md ");
       body.setContent(escapeTags(state.completed.content));
+      clampCompletedScrollOffset();
       body.setScroll(state.completed.scrollOffset);
       return;
     }
@@ -400,7 +443,6 @@ function createApp(rootDir) {
   }
 
   function renderCursor() {
-    screen.program.showCursor();
     screen.program.hideCursor();
   }
 
@@ -437,7 +479,7 @@ function createApp(rootDir) {
   }
 
   function currentNumberLength(task) {
-    return (task.requestedPriority ?? String(state.todo.currentIndex + 1)).length;
+    return (task.requestedPriority ?? "").length;
   }
 
   function moveHorizontal(delta) {
@@ -456,7 +498,8 @@ function createApp(rootDir) {
 
   function moveVertical(delta) {
     if (state.currentFile === "completed") {
-      state.completed.scrollOffset = Math.max(0, state.completed.scrollOffset + delta);
+      state.completed.scrollOffset += delta;
+      clampCompletedScrollOffset();
       render();
       return;
     }
@@ -574,6 +617,7 @@ function createApp(rootDir) {
       task.text = `${task.text.slice(0, textIndex - 1)}${task.text.slice(textIndex)}`;
       state.todo.cursorColumn -= 1;
       state.dirty = true;
+      ensureCursorVisible();
       render();
       return;
     }
@@ -583,6 +627,7 @@ function createApp(rootDir) {
       editNumber(task, (digits) => `${digits.slice(0, deleteIndex)}${digits.slice(deleteIndex + 1)}`);
       state.todo.cursorColumn = Math.max(numberStart, state.todo.cursorColumn - 1);
       state.dirty = true;
+      ensureCursorVisible();
       render();
     }
   }
@@ -606,6 +651,7 @@ function createApp(rootDir) {
       const textIndex = state.todo.cursorColumn - textStart;
       task.text = `${task.text.slice(0, textIndex)}${task.text.slice(textIndex + 1)}`;
       state.dirty = true;
+      ensureCursorVisible();
       render();
       return;
     }
@@ -614,6 +660,7 @@ function createApp(rootDir) {
       const deleteIndex = state.todo.cursorColumn - numberStart;
       editNumber(task, (digits) => `${digits.slice(0, deleteIndex)}${digits.slice(deleteIndex + 1)}`);
       state.dirty = true;
+      ensureCursorVisible();
       render();
     }
   }
@@ -626,8 +673,11 @@ function createApp(rootDir) {
     const committed = commitMissingPriorities(state.todo.tasks);
     const insertionIndex = state.todo.tasks.length === 0 ? 0 : state.todo.currentIndex + 1;
     const updated = committed.map((task) => ({ ...task }));
-    const task = createTask("", String(insertionIndex + 1));
+    const task = createTask("", null);
     updated.splice(insertionIndex, 0, task);
+    updated.forEach((entry, index) => {
+      entry.requestedPriority = String(index + 1);
+    });
     replaceTasks(updated, task.id);
     state.todo.currentIndex = insertionIndex;
     state.todo.cursorColumn = taskPrefix(task, insertionIndex).length;
@@ -667,7 +717,7 @@ function createApp(rootDir) {
     }
 
     writeFileAtomically(state.files.todoPath, todoContent);
-    loadWorkspace("Saved TODO.md.");
+    loadWorkspace("Saved TODO.md.", { preservePosition: true });
     state.currentFile = "todo";
     render();
   }
@@ -689,7 +739,7 @@ function createApp(rootDir) {
       return;
     }
 
-    loadWorkspace("Reloaded from disk.");
+    loadWorkspace("Reloaded from disk.", { preservePosition: true });
     render();
   }
 
@@ -714,7 +764,7 @@ function createApp(rootDir) {
       return;
     }
 
-    if ((key.ctrl && key.name === "j") || key.name === "enter") {
+    if ((key.ctrl && key.name === "j") || key.name === "enter" || ch === "\n") {
       insertNewTask();
       return;
     }
@@ -773,7 +823,28 @@ function createApp(rootDir) {
       return;
     }
 
-    insertCharacter(ch || key.sequence);
+    if (ch) {
+      insertCharacter(ch);
+    }
+  });
+
+  function handleWheel(delta) {
+    if (state.currentFile === "completed") {
+      state.completed.scrollOffset += delta;
+      clampCompletedScrollOffset();
+      render();
+      return;
+    }
+
+    moveVertical(delta);
+  }
+
+  screen.on("wheelup", () => {
+    handleWheel(-3);
+  });
+
+  screen.on("wheeldown", () => {
+    handleWheel(3);
   });
 
   const reloadTimer = setInterval(() => {
