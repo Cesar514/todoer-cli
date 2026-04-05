@@ -1,6 +1,11 @@
 // Completed tasks for the current goal. \
 // Format: [x] <timestamp> <task> \
+// Example: [x] 2026-04-05T20:39:27Z Verify the completed-task log is sorted newest-first using 24-hour HH:MM:SS UTC timestamps. \
 
+[x] 2026-04-05T21:47:02Z Wrote a repository-specific README covering setup, runtime behavior, architecture, task-file storage rules, and the actual command surface of todoer-cli. \
+[x] 2026-04-05T21:21:39Z Added bottom viewport padding and TODO scroll clamping so short terminals can still reach the final items in TODO.md and TODO_COMPLETED.md. \
+[x] 2026-04-05T21:21:39Z Added wrapped-viewport regression coverage proving short-terminal scroll math still leaves enough room to reach the final TODO rows. \
+[x] 2026-04-05T20:39:27Z Expanded the TODO_COMPLETED.md header with a canonical example line so automated rewrites keep the completed-entry format explicit and stable. \
 [x] 2026-04-05T20:23:13Z Canonicalized TODO_COMPLETED.md output so parseable completed entries are rewritten in descending timestamp order using 24-hour HH:MM:SS UTC timestamps. \
 [x] 2026-04-05T20:23:13Z Added malformed-file recovery that backs up unreformattable TODO.md and TODO_COMPLETED.md to TODO.bak and TODO_COMPLETED.bak before recreating clean canonical task files. \
 [x] 2026-04-05T20:16:27Z Replaced mtime-only external-change detection with content-aware conflict checks so harmless same-content rewrites no longer trigger the fatal unsaved-edits warning. \

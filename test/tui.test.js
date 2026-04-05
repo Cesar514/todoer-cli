@@ -4,6 +4,7 @@ const path = require("node:path");
 const pty = require("node-pty");
 const stripAnsiModule = require("strip-ansi");
 const { COMPLETED_HEADER_LINES, TODO_HEADER_LINES, serializeCompletedFile, serializeTodoFile } = require("../src/task-files");
+const { __test__: tuiLayout } = require("../src/tui-app");
 
 const REPO_ROOT = path.resolve(__dirname, "..");
 const CLI_PATH = path.join(REPO_ROOT, "src", "cli.js");
@@ -377,4 +378,21 @@ describe("todoer-cli nano-like TUI", () => {
     await waitFor(() => session.term._destroyed !== true && session.term._socket.destroyed !== true, 12000);
     await waitForText(session, "read-only");
   }, 12000);
+
+  test("viewport math leaves enough scroll room to reach the final wrapped TODO rows in short terminals", () => {
+    const width = 40;
+    const viewportHeight = 8;
+    const todoLines = Array.from(
+      { length: 20 },
+      (_, index) => `[] ${index + 1}. Pending task ${index + 1} with extra wrapping text to force a cramped viewport`,
+    );
+
+    const lastTaskIndex = todoLines.length - 1;
+    const lastTaskRowStart = tuiLayout.visualRowStart(todoLines, lastTaskIndex, width);
+    const maxScrollOffset = tuiLayout.maxScrollOffsetForLines(todoLines, width, viewportHeight);
+    const lastTaskRowCount = tuiLayout.wrapLine(todoLines[lastTaskIndex], width).length;
+
+    expect(maxScrollOffset + viewportHeight).toBeGreaterThanOrEqual(lastTaskRowStart + lastTaskRowCount);
+    expect(maxScrollOffset).toBeGreaterThan(0);
+  });
 });

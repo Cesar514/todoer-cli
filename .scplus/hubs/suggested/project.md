@@ -8,10 +8,10 @@ Suggested hub generated from persisted full-index artifacts.
 - Modules: ., src, test
 - Feature tags: (none)
 
-@linked-to [[command line interface]]
-@linked-to [[argument tokenization]]
-@linked-to [[ollama model interaction]]
-@linked-to [[file path resolution]]
+@linked-to [[configures linting rules]]
+@linked-to [[handles command parsing]]
+@linked-to [[manages model interactions]]
+@linked-to [[processes task files]]
 
 - [[eslint.config.js|Suggested because it anchors Project]]
 - [[src/cli.js|Suggested because it anchors Project]]

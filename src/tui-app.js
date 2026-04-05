@@ -12,6 +12,7 @@ const {
 } = require("./task-files");
 
 let nextTaskId = 1;
+const VIEWPORT_BOTTOM_PADDING_LINES = 10;
 
 function createTask(text, requestedPriority = null) {
   return {
@@ -169,6 +170,40 @@ function commentsHeight() {
   return TODO_HEADER_LINES.length + 3;
 }
 
+function viewportPadding() {
+  return "\n".repeat(VIEWPORT_BOTTOM_PADDING_LINES);
+}
+
+function wrapLine(line, width) {
+  if (line.length === 0) {
+    return [""];
+  }
+
+  const segments = [];
+  for (let index = 0; index < line.length; index += width) {
+    segments.push(line.slice(index, index + width));
+  }
+  return segments;
+}
+
+function wrappedRowCount(lines, width, bottomPaddingLines = VIEWPORT_BOTTOM_PADDING_LINES) {
+  return lines.reduce((total, line) => total + wrapLine(line, width).length, 0) + bottomPaddingLines;
+}
+
+function visualRowStart(lines, index, width) {
+  let row = 0;
+
+  for (let current = 0; current < index; current += 1) {
+    row += wrapLine(lines[current] ?? "", width).length;
+  }
+
+  return row;
+}
+
+function maxScrollOffsetForLines(lines, width, viewportHeight, bottomPaddingLines = VIEWPORT_BOTTOM_PADDING_LINES) {
+  return Math.max(0, wrappedRowCount(lines, width, bottomPaddingLines) - Math.max(1, viewportHeight));
+}
+
 function createApp(rootDir) {
   ensureTaskFiles(rootDir);
 
@@ -307,11 +342,19 @@ function createApp(rootDir) {
   }
 
   function completedVisualRowCount() {
-    const width = Math.max(1, bodyInnerWidth(body));
-    return Math.max(
-      1,
-      state.completed.lines.reduce((total, line) => total + Math.max(1, Math.ceil(Math.max(1, line.length) / width)), 0),
-    );
+    return Math.max(1, wrappedRowCount(state.completed.lines, Math.max(1, bodyInnerWidth(body))));
+  }
+
+  function todoVisualRowCount() {
+    return wrappedRowCount(todoDisplayLines(), Math.max(1, bodyInnerWidth(body)));
+  }
+
+  function maxTodoScrollOffset() {
+    return Math.max(0, todoVisualRowCount() - Math.max(1, bodyInnerHeight(body)));
+  }
+
+  function clampTodoScrollOffset() {
+    state.todo.scrollOffset = clamp(state.todo.scrollOffset, 0, maxTodoScrollOffset());
   }
 
   function maxCompletedScrollOffset() {
@@ -335,6 +378,8 @@ function createApp(rootDir) {
     if (state.todo.scrollOffset < 0) {
       state.todo.scrollOffset = 0;
     }
+
+    clampTodoScrollOffset();
   }
 
   function setTodoTasks(tasks, options = {}) {
@@ -403,20 +448,8 @@ function createApp(rootDir) {
       : state.todo.tasks.map((task, index) => renderTaskLine(task, index));
   }
 
-  function visualRowsForLine(line) {
-    const width = Math.max(1, bodyInnerWidth(body));
-    return Math.max(1, Math.ceil(Math.max(1, line.length) / width));
-  }
-
   function visualRowStartForIndex(index) {
-    const lines = todoDisplayLines();
-    let row = 0;
-
-    for (let current = 0; current < index; current += 1) {
-      row += visualRowsForLine(lines[current] ?? "");
-    }
-
-    return row;
+    return visualRowStart(todoDisplayLines(), index, Math.max(1, bodyInnerWidth(body)));
   }
 
   function visualCursorPosition() {
@@ -430,6 +463,39 @@ function createApp(rootDir) {
       visualRow: visualRowStartForIndex(state.todo.currentIndex) + Math.floor(zeroBasedColumn / width),
       visualColumn: zeroBasedColumn % width,
     };
+  }
+
+  function completedWrappedLines() {
+    const width = Math.max(1, bodyInnerWidth(body));
+    return state.completed.lines.flatMap((line) => wrapLine(line, width).map((segment) => escapeTags(segment)));
+  }
+
+  function todoWrappedLines() {
+    const width = Math.max(1, bodyInnerWidth(body));
+
+    return todoDisplayLines().flatMap((line, index) => {
+      const segments = wrapLine(line, width);
+      if (index !== state.todo.currentIndex) {
+        return segments.map((segment) => escapeTags(segment));
+      }
+
+      const safeColumn = Math.max(0, Math.min(state.todo.cursorColumn, line.length));
+      const zeroBasedColumn = safeColumn === line.length ? Math.max(0, safeColumn - 1) : safeColumn;
+      const activeSegmentIndex = Math.floor(zeroBasedColumn / width);
+      const activeColumn = zeroBasedColumn % width;
+
+      return segments.map((segment, segmentIndex) => {
+        if (segmentIndex !== activeSegmentIndex) {
+          return escapeTags(segment);
+        }
+
+        const localColumn = Math.min(activeColumn, segment.length);
+        const before = escapeTags(segment.slice(0, localColumn));
+        const activeCharacter = segment[localColumn] ?? " ";
+        const after = escapeTags(segment.slice(Math.min(segment.length, localColumn + 1)));
+        return `${before}{inverse}${escapeTags(activeCharacter)}{/inverse}${after}`;
+      });
+    });
   }
 
   function applyLayout() {
@@ -449,7 +515,7 @@ function createApp(rootDir) {
   function renderBody() {
     if (state.currentFile === "completed") {
       body.setLabel(" TODO_COMPLETED.md ");
-      body.setContent(escapeTags(state.completed.content));
+      body.setContent(`${completedWrappedLines().join("\n")}${viewportPadding()}`);
       clampCompletedScrollOffset();
       body.setScroll(state.completed.scrollOffset);
       return;
@@ -458,17 +524,8 @@ function createApp(rootDir) {
     comments.setLabel(" TODO.md Comments ");
     comments.setContent(escapeTags(`${TODO_HEADER_LINES.join("\n")}\n`));
     body.setLabel(" TODO.md Tasks ");
-    body.setContent(todoDisplayLines().map((line, index) => {
-      if (index !== state.todo.currentIndex) {
-        return escapeTags(line);
-      }
-
-      const safeColumn = Math.max(0, Math.min(state.todo.cursorColumn, line.length));
-      const before = escapeTags(line.slice(0, safeColumn));
-      const activeCharacter = line[safeColumn] ?? " ";
-      const after = escapeTags(line.slice(Math.min(line.length, safeColumn + 1)));
-      return `${before}{inverse}${escapeTags(activeCharacter)}{/inverse}${after}`;
-    }).join("\n"));
+    body.setContent(`${todoWrappedLines().join("\n")}${viewportPadding()}`);
+    clampTodoScrollOffset();
     body.setScroll(state.todo.scrollOffset);
   }
 
@@ -545,13 +602,26 @@ function createApp(rootDir) {
       return;
     }
 
-    state.todo.currentIndex = Math.max(0, Math.min(state.todo.tasks.length - 1, state.todo.currentIndex + delta));
+    const nextIndex = Math.max(0, Math.min(state.todo.tasks.length - 1, state.todo.currentIndex + delta));
+    const hitTopBoundary = nextIndex === 0 && state.todo.currentIndex === 0 && delta < 0;
+    const hitBottomBoundary = nextIndex === state.todo.tasks.length - 1
+      && state.todo.currentIndex === state.todo.tasks.length - 1
+      && delta > 0;
+
+    state.todo.currentIndex = nextIndex;
     const task = currentTask();
     const maxLineLength = renderTaskLine(task, state.todo.currentIndex).length;
     if (state.todo.cursorColumn > maxLineLength) {
       state.todo.cursorColumn = maxLineLength;
     }
-    ensureCursorVisible();
+
+    if (hitTopBoundary || hitBottomBoundary) {
+      state.todo.scrollOffset += delta;
+      clampTodoScrollOffset();
+    } else {
+      ensureCursorVisible();
+    }
+
     render();
   }
 
@@ -1001,4 +1071,11 @@ function createApp(rootDir) {
 
 module.exports = {
   createApp,
+  __test__: {
+    VIEWPORT_BOTTOM_PADDING_LINES,
+    maxScrollOffsetForLines,
+    visualRowStart,
+    wrapLine,
+    wrappedRowCount,
+  },
 };
