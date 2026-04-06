@@ -186,6 +186,37 @@ function wrapLine(line, width) {
   return segments;
 }
 
+function visualCursorPositionForLine(line, cursorColumn, width) {
+  const safeColumn = Math.max(0, Math.min(cursorColumn, line.length));
+  return {
+    visualRowOffset: Math.floor(safeColumn / width),
+    visualColumn: safeColumn % width,
+  };
+}
+
+function renderLineWithInlineCursor(line, cursorColumn, width) {
+  const segments = wrapLine(line, width).slice();
+  const safeColumn = Math.max(0, Math.min(cursorColumn, line.length));
+  const activeSegmentIndex = Math.floor(safeColumn / width);
+  const activeColumn = safeColumn % width;
+
+  while (segments.length <= activeSegmentIndex) {
+    segments.push("");
+  }
+
+  return segments.map((segment, segmentIndex) => {
+    if (segmentIndex !== activeSegmentIndex) {
+      return escapeTags(segment);
+    }
+
+    const localColumn = Math.min(activeColumn, segment.length);
+    const before = escapeTags(segment.slice(0, localColumn));
+    const activeCharacter = segment[localColumn] ?? " ";
+    const after = escapeTags(segment.slice(Math.min(segment.length, localColumn + 1)));
+    return `${before}{inverse}${escapeTags(activeCharacter)}{/inverse}${after}`;
+  });
+}
+
 function wrappedRowCount(lines, width, bottomPaddingLines = VIEWPORT_BOTTOM_PADDING_LINES) {
   return lines.reduce((total, line) => total + wrapLine(line, width).length, 0) + bottomPaddingLines;
 }
@@ -456,12 +487,11 @@ function createApp(rootDir) {
     const lines = todoDisplayLines();
     const currentLine = lines[state.todo.currentIndex] ?? emptyTaskLine(0);
     const width = Math.max(1, bodyInnerWidth(body));
-    const safeColumn = Math.max(0, Math.min(state.todo.cursorColumn, currentLine.length));
-    const zeroBasedColumn = safeColumn === currentLine.length ? Math.max(0, safeColumn - 1) : safeColumn;
+    const position = visualCursorPositionForLine(currentLine, state.todo.cursorColumn, width);
 
     return {
-      visualRow: visualRowStartForIndex(state.todo.currentIndex) + Math.floor(zeroBasedColumn / width),
-      visualColumn: zeroBasedColumn % width,
+      visualRow: visualRowStartForIndex(state.todo.currentIndex) + position.visualRowOffset,
+      visualColumn: position.visualColumn,
     };
   }
 
@@ -474,27 +504,11 @@ function createApp(rootDir) {
     const width = Math.max(1, bodyInnerWidth(body));
 
     return todoDisplayLines().flatMap((line, index) => {
-      const segments = wrapLine(line, width);
       if (index !== state.todo.currentIndex) {
-        return segments.map((segment) => escapeTags(segment));
+        return wrapLine(line, width).map((segment) => escapeTags(segment));
       }
 
-      const safeColumn = Math.max(0, Math.min(state.todo.cursorColumn, line.length));
-      const zeroBasedColumn = safeColumn === line.length ? Math.max(0, safeColumn - 1) : safeColumn;
-      const activeSegmentIndex = Math.floor(zeroBasedColumn / width);
-      const activeColumn = zeroBasedColumn % width;
-
-      return segments.map((segment, segmentIndex) => {
-        if (segmentIndex !== activeSegmentIndex) {
-          return escapeTags(segment);
-        }
-
-        const localColumn = Math.min(activeColumn, segment.length);
-        const before = escapeTags(segment.slice(0, localColumn));
-        const activeCharacter = segment[localColumn] ?? " ";
-        const after = escapeTags(segment.slice(Math.min(segment.length, localColumn + 1)));
-        return `${before}{inverse}${escapeTags(activeCharacter)}{/inverse}${after}`;
-      });
+      return renderLineWithInlineCursor(line, state.todo.cursorColumn, width);
     });
   }
 
@@ -1074,6 +1088,8 @@ module.exports = {
   __test__: {
     VIEWPORT_BOTTOM_PADDING_LINES,
     maxScrollOffsetForLines,
+    renderLineWithInlineCursor,
+    visualCursorPositionForLine,
     visualRowStart,
     wrapLine,
     wrappedRowCount,

@@ -2,6 +2,7 @@
 // Format: [x] <timestamp> <task> \
 // Example: [x] 2026-04-05T20:39:27Z Verify the completed-task log is sorted newest-first using 24-hour HH:MM:SS UTC timestamps. \
 
+[x] 2026-04-06T14:32:03Z Fixed the TODO.md inline cursor so the white highlight sits in the next insertion cell after the last typed character instead of covering the final character, including wrap-boundary rendering. \
 [x] 2026-04-05T21:47:02Z Wrote a repository-specific README covering setup, runtime behavior, architecture, task-file storage rules, and the actual command surface of todoer-cli. \
 [x] 2026-04-05T21:21:39Z Added bottom viewport padding and TODO scroll clamping so short terminals can still reach the final items in TODO.md and TODO_COMPLETED.md. \
 [x] 2026-04-05T21:21:39Z Added wrapped-viewport regression coverage proving short-terminal scroll math still leaves enough room to reach the final TODO rows. \

@@ -395,4 +395,22 @@ describe("todoer-cli nano-like TUI", () => {
     expect(maxScrollOffset + viewportHeight).toBeGreaterThanOrEqual(lastTaskRowStart + lastTaskRowCount);
     expect(maxScrollOffset).toBeGreaterThan(0);
   });
+
+  test("inline cursor renders in the next insertion cell after the last character", () => {
+    const line = "[] 1. First task";
+    const rendered = tuiLayout.renderLineWithInlineCursor(line, line.length, 80);
+    const position = tuiLayout.visualCursorPositionForLine(line, line.length, 80);
+
+    expect(rendered).toEqual(["[] 1. First task{inverse} {/inverse}"]);
+    expect(position).toEqual({ visualRowOffset: 0, visualColumn: line.length });
+  });
+
+  test("inline cursor moves onto the next wrapped row when the line ends on a wrap boundary", () => {
+    const line = "12345";
+    const rendered = tuiLayout.renderLineWithInlineCursor(line, line.length, 5);
+    const position = tuiLayout.visualCursorPositionForLine(line, line.length, 5);
+
+    expect(rendered).toEqual(["12345", "{inverse} {/inverse}"]);
+    expect(position).toEqual({ visualRowOffset: 1, visualColumn: 0 });
+  });
 });
