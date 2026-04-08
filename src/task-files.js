@@ -9,7 +9,7 @@ const COMPLETED_BACKUP_FILE_NAME = "TODO_COMPLETED.bak";
 const TODO_HEADER_LINES = [
   "// Current goal: keep this TODO list accurate while implementing the user's current request.",
   "// Rule: complete all tasks asked by the user and verify they are fully completed before moving them to TODO_COMPLETED.md.",
-  "// Format: [] <priority>. <task>",
+  "// Format: [] <priority>. <task> where <priority> is plain decimal digits followed immediately by a period, for example [] 1. First task, [] 2. Second task, [] 14. Final task. Priority numbers must be strictly increasing and never repeated. Do not use 1), (1), 1:, -, *, or any numbering format other than <digits>.",
 ];
 
 const COMPLETED_HEADER_LINES = [

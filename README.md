@@ -198,6 +198,8 @@ The TUI reads raw file contents, builds an editable in-memory model for pending 
 [] <priority>. <task> \
 ```
 
+The pending-task header also makes the numbering rule explicit: `<priority>` must be plain decimal digits followed immediately by a period, such as `[] 1. First task`, `[] 2. Second task`, or `[] 14. Final task`. Priority numbers must be strictly increasing and never repeated. Formats like `1)`, `(1)`, `1:`, `-`, or `*` are invalid.
+
 `TODO_COMPLETED.md` is a completed-task log with strict header comments and lines in this shape:
 
 ```text

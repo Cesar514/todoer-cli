@@ -2,6 +2,9 @@
 // Format: [x] <timestamp> <task> \
 // Example: [x] 2026-04-05T20:39:27Z Verify the completed-task log is sorted newest-first using 24-hour HH:MM:SS UTC timestamps. \
 
+[x] 2026-04-08T10:15:18Z Added the missing TODO.md header rule that pending-task priority numbers must be strictly increasing and never repeated, and aligned the README wording with the canonical serializer. \
+[x] 2026-04-08T09:48:37Z Made the TODO.md comments pane wrap long header lines, clamp its height against the terminal, and stay mouse-wheel scrollable so the explicit numbering rule remains readable on narrow windows. \
+[x] 2026-04-08T09:36:54Z Expanded the top TODO.md format comment so AI agents are explicitly told to use only plain decimal numbering like 1. 2. 3., and updated the README storage docs to match. \
 [x] 2026-04-06T14:32:03Z Fixed the TODO.md inline cursor so the white highlight sits in the next insertion cell after the last typed character instead of covering the final character, including wrap-boundary rendering. \
 [x] 2026-04-05T21:47:02Z Wrote a repository-specific README covering setup, runtime behavior, architecture, task-file storage rules, and the actual command surface of todoer-cli. \
 [x] 2026-04-05T21:21:39Z Added bottom viewport padding and TODO scroll clamping so short terminals can still reach the final items in TODO.md and TODO_COMPLETED.md. \

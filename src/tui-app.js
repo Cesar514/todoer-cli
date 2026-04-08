@@ -162,12 +162,12 @@ function bodyInnerWidth(body) {
   return body.width - body.iwidth;
 }
 
-function clamp(value, min, max) {
-  return Math.max(min, Math.min(max, value));
+function boxInnerWidth(box) {
+  return box.width - box.iwidth;
 }
 
-function commentsHeight() {
-  return TODO_HEADER_LINES.length + 3;
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
 }
 
 function viewportPadding() {
@@ -265,6 +265,9 @@ function createApp(rootDir) {
       lines: [],
       scrollOffset: 0,
     },
+    comments: {
+      scrollOffset: 0,
+    },
     files: {
       todoPath: getTodoFilePath(rootDir),
       completedPath: getCompletedFilePath(rootDir),
@@ -291,8 +294,10 @@ function createApp(rootDir) {
     top: 3,
     left: 0,
     width: "100%",
-    height: commentsHeight(),
+    height: 5,
     border: "line",
+    scrollable: true,
+    alwaysScroll: true,
     tags: false,
     mouse: true,
     style: { border: { fg: "cyan" } },
@@ -300,10 +305,10 @@ function createApp(rootDir) {
 
   const body = blessed.box({
     parent: screen,
-    top: commentsHeight() + 3,
+    top: 8,
     left: 0,
     width: "100%",
-    height: `100%-${commentsHeight() + 6}`,
+    height: `100%-11`,
     border: "line",
     scrollable: true,
     alwaysScroll: true,
@@ -500,6 +505,27 @@ function createApp(rootDir) {
     return state.completed.lines.flatMap((line) => wrapLine(line, width).map((segment) => escapeTags(segment)));
   }
 
+  function commentsWrappedLines() {
+    const width = Math.max(1, boxInnerWidth(comments));
+    return TODO_HEADER_LINES.flatMap((line) => wrapLine(line, width));
+  }
+
+  function maxCommentsHeight() {
+    return Math.max(5, screen.height - 9);
+  }
+
+  function commentsHeight() {
+    return Math.min(maxCommentsHeight(), commentsWrappedLines().length + 3);
+  }
+
+  function maxCommentsScrollOffset() {
+    return Math.max(0, commentsWrappedLines().length - Math.max(1, comments.height - comments.iheight));
+  }
+
+  function clampCommentsScrollOffset() {
+    state.comments.scrollOffset = clamp(state.comments.scrollOffset, 0, maxCommentsScrollOffset());
+  }
+
   function todoWrappedLines() {
     const width = Math.max(1, bodyInnerWidth(body));
 
@@ -522,6 +548,7 @@ function createApp(rootDir) {
 
     comments.show();
     comments.height = commentsHeight();
+    clampCommentsScrollOffset();
     body.top = commentsHeight() + 3;
     body.height = Math.max(3, screen.height - (commentsHeight() + 6));
   }
@@ -536,7 +563,8 @@ function createApp(rootDir) {
     }
 
     comments.setLabel(" TODO.md Comments ");
-    comments.setContent(escapeTags(`${TODO_HEADER_LINES.join("\n")}\n`));
+    comments.setContent(`${commentsWrappedLines().join("\n")}\n`);
+    comments.setScroll(state.comments.scrollOffset);
     body.setLabel(" TODO.md Tasks ");
     body.setContent(`${todoWrappedLines().join("\n")}${viewportPadding()}`);
     clampTodoScrollOffset();
@@ -1051,6 +1079,26 @@ function createApp(rootDir) {
 
     moveVertical(delta);
   }
+
+  comments.on("wheelup", () => {
+    if (state.currentFile !== "todo") {
+      return;
+    }
+
+    state.comments.scrollOffset -= 3;
+    clampCommentsScrollOffset();
+    render();
+  });
+
+  comments.on("wheeldown", () => {
+    if (state.currentFile !== "todo") {
+      return;
+    }
+
+    state.comments.scrollOffset += 3;
+    clampCommentsScrollOffset();
+    render();
+  });
 
   screen.on("wheelup", () => {
     handleWheel(-3);

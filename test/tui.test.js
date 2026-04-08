@@ -286,6 +286,7 @@ describe("todoer-cli nano-like TUI", () => {
     session.term.resize(45, 18);
     await new Promise((resolve) => setTimeout(resolve, 400));
     await waitForText(session, "^J New Task");
+    await waitForText(session, "Do not use 1)");
     session.term.resize(120, 40);
     await new Promise((resolve) => setTimeout(resolve, 400));
     await waitForText(session, "First task");
